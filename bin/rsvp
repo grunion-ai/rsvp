@@ -1,0 +1,29 @@
+#!/bin/bash
+# RSVP Reader - Quick launch from clipboard
+# Usage: rsvp
+#        Copy text to clipboard, then run this script
+#        Opens browser with RSVP reader and auto-plays
+#
+# Hotkey setup:
+#   1. Open Shortcuts.app
+#   2. Create new Shortcut → "Run Shell Script" → ~/bin/rsvp
+#   3. System Settings → Keyboard → Shortcuts → assign ⌘⇧R
+
+# Read clipboard
+TEXT=$(pbpaste)
+
+# Check if clipboard has content
+if [ -z "$TEXT" ]; then
+    echo "Clipboard is empty. Copy some text first."
+    exit 1
+fi
+
+# URL-encode the text using Python
+ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))" <<< "$TEXT")
+
+# Open in browser with autoplay
+# Try common Vite dev ports (5173 default, 3000, 3001, 3002 when ports are in use)
+# Or use a deployed URL if available
+RSVP_URL="${RSVP_URL:-http://localhost:5173}"
+
+open "${RSVP_URL}/#text=$ENCODED&autoplay=true"

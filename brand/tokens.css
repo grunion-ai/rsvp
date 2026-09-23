@@ -1,0 +1,29 @@
+/* rsvp design tokens. Palette lifted from the saved OSHEA type slides:
+   bone ground, ink type, one signal red for the recognition point. */
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("fonts/InstrumentSerif-Regular.ttf") format("truetype");
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("fonts/InstrumentSerif-Italic.ttf") format("truetype");
+  font-weight: 400; font-style: italic; font-display: swap;
+}
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap");
+
+:root {
+  --bone: #ECF3EB;
+  --ink: #0B0B0B;
+  --signal: #FC0210;
+  --mute: #6F766E;      /* ink at 60% on bone */
+  --line: #C9D1C7;      /* rules, track */
+  --bg: var(--bone);
+  --fg: var(--ink);
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-ui: "Satoshi", system-ui, -apple-system, sans-serif;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: var(--ink); --fg: var(--bone); --mute: #9AA399; --line: #2A2D29; }
+}

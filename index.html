@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>rsvp</title>
+<link rel="stylesheet" href="brand/tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-ui);
+    display: grid; grid-template-rows: auto 1fr auto; min-height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; }
+  .mark { height: 34px; display: block; }
+  .mark.bone { display: none; }
+  @media (prefers-color-scheme: dark) { .mark.ink { display: none; } .mark.bone { display: block; } }
+  .meta { font-size: 13px; color: var(--mute); font-variant-numeric: tabular-nums; }
+
+  main { display: grid; place-items: center; padding: 0 16px; }
+  .stage { width: 100%; max-width: 720px; }
+  .word {
+    position: relative; height: 3.2em; font-size: clamp(32px, 8vw, 64px); font-weight: 500;
+    letter-spacing: -0.01em; white-space: nowrap; user-select: none;
+  }
+  .word::before, .word::after {
+    content: ""; position: absolute; left: 50%; width: 1px; height: 0.5em; background: var(--line);
+  }
+  .word::before { top: 0; } .word::after { bottom: 0; }
+  .word span { position: absolute; top: 50%; transform: translateY(-50%); }
+  .pre { right: 50%; transform: translate(-0.31em, -50%) !important; }
+  .orp { left: 50%; transform: translate(-0.31em, -50%) !important; color: var(--signal); }
+  .post { left: 50%; transform: translate(0.31em, -50%) !important; }
+  .idle { color: var(--mute); font-family: var(--font-display); font-style: italic; font-weight: 400; text-align: center; }
+  .idle span { position: static; transform: none !important; }
+
+  textarea {
+    width: 100%; min-height: 140px; margin-top: 24px; padding: 14px; font: 16px/1.5 var(--font-ui);
+    color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: var(--radius); resize: vertical;
+  }
+  textarea:focus { outline: 2px solid var(--signal); outline-offset: 2px; border-color: transparent; }
+  .reading textarea { display: none; }
+
+  footer { padding: 12px 20px 20px; display: grid; gap: 12px; }
+  progress { width: 100%; height: 3px; appearance: none; border: 0; background: var(--line); }
+  progress::-webkit-progress-bar { background: var(--line); }
+  progress::-webkit-progress-value { background: var(--signal); }
+  progress::-moz-progress-bar { background: var(--signal); }
+  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  button {
+    font: 500 15px var(--font-ui); color: var(--fg); background: transparent; border: 1px solid var(--fg);
+    border-radius: 999px; padding: 10px 18px; min-height: 44px; cursor: pointer;
+  }
+  button.primary { background: var(--fg); color: var(--bg); }
+  button:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  label.wpm { display: flex; align-items: center; gap: 10px; margin-left: auto; font-size: 14px; font-variant-numeric: tabular-nums; }
+  input[type=range] { accent-color: var(--signal); width: 160px; }
+  kbd { font: 12px var(--font-ui); color: var(--mute); }
+</style>
+</head>
+<body>
+<header>
+  <a href="./" aria-label="rsvp home"><img class="mark ink" src="brand/logo-ink.svg" alt="rsvp"><img class="mark bone" src="brand/logo-bone.svg" alt="rsvp"></a>
+  <div class="meta" id="meta"></div>
+</header>
+
+<main>
+  <div class="stage">
+    <div class="word idle" id="word" aria-live="off"><span>paste, then press space</span></div>
+    <textarea id="text" placeholder="Paste text here" aria-label="Text to read"></textarea>
+  </div>
+</main>
+
+<footer>
+  <progress id="bar" max="1" value="0"></progress>
+  <div class="controls">
+    <button class="primary" id="play">Play</button>
+    <button id="back" aria-label="Back ten words">−10</button>
+    <button id="fwd" aria-label="Forward ten words">+10</button>
+    <button id="restart">Restart</button>
+    <label class="wpm"><span id="wpmv">350</span> wpm <input type="range" id="wpm" min="150" max="900" step="25" value="350"></label>
+  </div>
+  <kbd>space play · ← → ±10 words · ↑ ↓ speed · R restart</kbd>
+</footer>
+
+<script type="module">
+import { orpIndex, tokenize, holdMs, totalMs } from './orp.js';
+
+const $ = (id) => document.getElementById(id);
+const el = { word: $('word'), text: $('text'), play: $('play'), bar: $('bar'), wpm: $('wpm'), wpmv: $('wpmv'), meta: $('meta') };
+let words = [], i = 0, timer = null, wpm = +(localStorage.getItem('rsvp.wpm') || 350);
+el.wpm.value = wpm; el.wpmv.textContent = wpm;
+
+const fmt = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const meta = () => {
+  if (!words.length) { el.meta.textContent = ''; return; }
+  el.meta.textContent = `${i}/${words.length} · ${fmt(totalMs(words.slice(i), wpm))} left`;
+};
+const show = (w) => {
+  const k = orpIndex(w);
+  el.word.classList.remove('idle');
+  el.word.innerHTML = `<span class="pre">${w.slice(0, k)}</span><span class="orp">${w[k]}</span><span class="post">${w.slice(k + 1)}</span>`;
+  el.bar.value = (i + 1) / words.length;
+  meta();
+};
+const stop = () => { clearInterval(timer); timer = null; el.play.textContent = 'Play'; document.body.classList.remove('reading'); };
+const tick = () => {
+  if (i >= words.length) { stop(); i = 0; return; }
+  show(words[i]);
+  timer = setTimeout(() => { i++; tick(); }, holdMs(words[i], wpm));
+};
+const load = () => { words = tokenize(el.text.value); i = 0; el.bar.value = 0; meta(); return words.length > 0; };
+const play = () => {
+  if (timer) { stop(); return; }
+  if (!words.length && !load()) { el.text.focus(); return; }
+  document.body.classList.add('reading'); el.play.textContent = 'Pause'; tick();
+};
+const seek = (n) => { i = Math.max(0, Math.min(words.length - 1, i + n)); if (words.length) show(words[i]); };
+const setWpm = (v) => { wpm = Math.max(150, Math.min(900, v)); el.wpm.value = wpm; el.wpmv.textContent = wpm; localStorage.setItem('rsvp.wpm', wpm); meta(); };
+
+el.play.onclick = play;
+$('back').onclick = () => seek(-10);
+$('fwd').onclick = () => seek(10);
+$('restart').onclick = () => { stop(); i = 0; el.bar.value = 0; if (words.length) show(words[0]); };
+el.wpm.oninput = (e) => setWpm(+e.target.value);
+el.text.oninput = () => { stop(); load(); };
+document.addEventListener('keydown', (e) => {
+  if (e.target === el.text && e.key !== 'Escape') return;
+  const map = { ' ': play, ArrowLeft: () => seek(-10), ArrowRight: () => seek(10), ArrowUp: () => setWpm(wpm + 25), ArrowDown: () => setWpm(wpm - 25), r: $('restart').onclick, R: $('restart').onclick, Escape: () => el.text.blur() };
+  if (map[e.key]) { e.preventDefault(); map[e.key](); }
+});
+
+// #text=<encoded>&autoplay=true hands text in from the clipboard shortcut or a share link.
+const fromHash = () => {
+    if (!h.get('text')) return;
+  stop(); el.text.value = h.get('text'); load();
+  if (h.get('autoplay') === 'true') play();
+};
+fromHash();
+addEventListener('hashchange', fromHash);
+</script>
+</body>
+</html>
