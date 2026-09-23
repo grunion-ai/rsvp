@@ -30,10 +30,8 @@
     content: ""; position: absolute; left: 50%; width: 1px; height: 0.5em; background: var(--line);
   }
   .word::before { top: 0; } .word::after { bottom: 0; }
-  .word span { position: absolute; top: 50%; transform: translateY(-50%); }
-  .pre { right: 50%; transform: translate(-0.31em, -50%) !important; }
-  .orp { left: 50%; transform: translate(-0.31em, -50%) !important; color: var(--signal); }
-  .post { left: 50%; transform: translate(0.31em, -50%) !important; }
+  .word > span { position: absolute; top: 50%; left: 50%; transform: translateY(-50%); }
+  .orp { color: var(--signal); }
   .idle { color: var(--mute); font-family: var(--font-display); font-style: italic; font-weight: 400; text-align: center; }
   .idle span { position: static; transform: none !important; }
 
@@ -110,7 +108,10 @@ const meta = () => {
 const show = (w) => {
   const k = orpIndex(w);
   el.word.classList.remove('idle');
-  el.word.innerHTML = `<span class="pre">${w.slice(0, k)}</span><span class="orp">${w[k]}</span><span class="post">${w.slice(k + 1)}</span>`;
+  const esc = (t) => t.replace(/[&<]/g, (c) => c === '&' ? '&amp;' : '&lt;');
+  el.word.innerHTML = `<span><span class="pre">${esc(w.slice(0, k))}</span><span class="orp">${esc(w[k])}</span><span class="post">${esc(w.slice(k + 1))}</span></span>`;
+  const run = el.word.firstChild, orp = run.querySelector('.orp');
+  run.style.transform = `translate(${-(orp.offsetLeft + orp.offsetWidth / 2)}px, -50%)`;
   el.bar.value = (i + 1) / words.length;
   meta();
 };
