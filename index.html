@@ -135,7 +135,8 @@ document.addEventListener('keydown', (e) => {
 
 // #text=<encoded>&autoplay=true hands text in from the clipboard shortcut or a share link.
 const fromHash = () => {
-    if (!h.get('text')) return;
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (!h.get('text')) return;
   stop(); el.text.value = h.get('text'); load();
   if (h.get('autoplay') === 'true') play();
 };
