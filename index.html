@@ -42,7 +42,13 @@
     color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: var(--radius); resize: vertical;
   }
   textarea:focus { outline: 2px solid var(--signal); outline-offset: 2px; border-color: transparent; }
-  .reading textarea { display: none; }
+  .reading textarea, .reading .clip { display: none; }
+  .clip {
+    display: block; width: 100%; margin-top: 24px; padding: 12px 16px; text-align: left; border-radius: var(--radius);
+    border: 1px dashed var(--line); background: transparent; color: var(--mute); font-weight: 400; line-height: 1.4;
+  }
+  .clip[hidden] { display: none; }
+  .clip b { color: var(--fg); font-weight: 500; display: block; margin-bottom: 4px; }
 
   footer { padding: 12px 20px 20px; display: grid; gap: 12px; }
   progress { width: 100%; height: 3px; appearance: none; border: 0; background: var(--line); }
@@ -70,6 +76,7 @@
 <main>
   <div class="stage">
     <div class="word idle" id="word" aria-live="off"><span>paste, then press space</span></div>
+    <button class="clip" id="clip" hidden></button>
     <textarea id="text" placeholder="Paste text here" aria-label="Text to read"></textarea>
   </div>
 </main>
@@ -78,6 +85,7 @@
   <progress id="bar" max="1" value="0"></progress>
   <div class="controls">
     <button class="primary" id="play">Play</button>
+    <button id="paste" hidden>Paste</button>
     <button id="back" aria-label="Back ten words">−10</button>
     <button id="fwd" aria-label="Forward ten words">+10</button>
     <button id="restart">Restart</button>
@@ -87,11 +95,11 @@
 </footer>
 
 <script type="module">
-import { orpIndex, tokenize, holdMs, totalMs } from './orp.js';
+import { orpIndex, tokenize, pace, totalMs } from './orp.js';
 
 const $ = (id) => document.getElementById(id);
 const el = { word: $('word'), text: $('text'), play: $('play'), bar: $('bar'), wpm: $('wpm'), wpmv: $('wpmv'), meta: $('meta') };
-let words = [], i = 0, timer = null, wpm = +(localStorage.getItem('rsvp.wpm') || 350);
+let words = [], i = 0, since = 0, timer = null, wpm = +(localStorage.getItem('rsvp.wpm') || 350);
 el.wpm.value = wpm; el.wpmv.textContent = wpm;
 
 const fmt = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -110,13 +118,13 @@ const stop = () => { clearInterval(timer); timer = null; el.play.textContent = '
 const tick = () => {
   if (i >= words.length) { stop(); i = 0; return; }
   show(words[i]);
-  timer = setTimeout(() => { i++; tick(); }, holdMs(words[i], wpm));
+  timer = setTimeout(() => { i++; since++; tick(); }, pace(words[i], wpm, since));
 };
 const load = () => { words = tokenize(el.text.value); i = 0; el.bar.value = 0; meta(); return words.length > 0; };
 const play = () => {
   if (timer) { stop(); return; }
   if (!words.length && !load()) { el.text.focus(); return; }
-  document.body.classList.add('reading'); el.play.textContent = 'Pause'; tick();
+  since = 0; document.body.classList.add('reading'); el.play.textContent = 'Pause'; tick();
 };
 const seek = (n) => { i = Math.max(0, Math.min(words.length - 1, i + n)); if (words.length) show(words[i]); };
 const setWpm = (v) => { wpm = Math.max(150, Math.min(900, v)); el.wpm.value = wpm; el.wpmv.textContent = wpm; localStorage.setItem('rsvp.wpm', wpm); meta(); };
@@ -142,6 +150,31 @@ const fromHash = () => {
 };
 fromHash();
 addEventListener('hashchange', fromHash);
+
+// Clipboard: Chrome reads on focus once permission is granted and offers the
+// text as a chip; Safari and iOS only read inside a tap, so they get a Paste
+// button that opens the system paste prompt.
+const clip = $('clip'), pasteBtn = $('paste');
+const canRead = !!navigator.clipboard?.readText;
+const offer = (t) => {
+  if (!t || t.trim().length < 20 || t === el.text.value) return;
+  clip.innerHTML = `<b>Read the clipboard</b>${t.trim().slice(0, 140).replace(/</g, '&lt;')}${t.length > 140 ? '…' : ''}`;
+  clip.hidden = false; clip.onclick = () => { el.text.value = t; load(); clip.hidden = true; play(); };
+};
+const readClip = async (silent) => {
+  try { offer(await navigator.clipboard.readText()); }
+  catch (e) { if (!silent) el.text.focus(); }
+};
+if (canRead) {
+  pasteBtn.hidden = false;
+  pasteBtn.onclick = () => readClip(false);
+  const quiet = async () => {
+    if (el.text.value || document.hidden) return;
+    const p = await navigator.permissions?.query({ name: 'clipboard-read' }).catch(() => null);
+    if (p?.state === 'granted') readClip(true);
+  };
+  quiet(); addEventListener('focus', quiet); document.addEventListener('visibilitychange', quiet);
+}
 </script>
 </body>
 </html>

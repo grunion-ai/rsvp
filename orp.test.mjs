@@ -25,3 +25,21 @@ test('hold time scales with punctuation and length', () => {
 test('total time sums the holds', () => {
   assert.equal(totalMs(['a', 'b.'], 600), 100 + 160);
 });
+
+import { rampFactor, pace } from './orp.js';
+
+test('ramp climbs from 60% to full speed over the first 30 words', () => {
+  assert.equal(rampFactor(0), 0.6);
+  assert.equal(rampFactor(15), 0.8);
+  assert.equal(rampFactor(30), 1);
+  assert.equal(rampFactor(500), 1);
+});
+
+test('pace holds longer while ramping, on numbers, and on very long words', () => {
+  assert.equal(pace('word', 300, 30), 200);
+  assert.equal(pace('word', 300, 0), 333);
+  assert.equal(pace('2026', 300, 30), 280);
+  assert.equal(pace('presentation', 300, 30), 240);
+  assert.equal(pace('incomprehensibilities', 300, 30), 280);
+  assert.equal(pace('word.', 300, 30), 320);
+});
